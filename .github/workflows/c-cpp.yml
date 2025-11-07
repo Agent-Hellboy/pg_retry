@@ -1,23 +1,36 @@
-name: C/C++ CI
+name: build
 
-on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+on: [push, pull_request]
 
 jobs:
-  build:
-
-    runs-on: ubuntu-latest
+  ubuntu:
+    runs-on: ${{ matrix.os }}
+    if: ${{ !startsWith(github.ref_name, 'mac') && !startsWith(github.ref_name, 'windows') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - postgres: 19
+            os: ubuntu-24.04
+          - postgres: 18
+            os: ubuntu-24.04
+          - postgres: 17
+            os: ubuntu-24.04
+          - postgres: 16
+            os: ubuntu-24.04
 
     steps:
-    - uses: actions/checkout@v4
-    - name: configure
-      run: ./configure
-    - name: make
-      run: make
-    - name: make check
-      run: make check
-    - name: make distcheck
-      run: make distcheck
+      - uses: actions/checkout@v5
+      - uses: ankane/setup-postgres@v1
+        with:
+          postgres-version: ${{ matrix.postgres }}
+          dev-files: true
+      - run: make
+        env:
+          PG_CFLAGS: -std=c11 -DUSE_ASSERT_CHECKING -Wall -Wextra -Werror -Wno-unused-parameter -Wno-sign-compare -Wno-declaration-after-statement ${{ matrix.postgres >= 18 && '-Wno-missing-field-initializers' || '' }}
+      - run: |
+          export PG_CONFIG=`which pg_config`
+          sudo --preserve-env=PG_CONFIG make install
+      - run: make installcheck
+      - if: ${{ failure() }}
+        run: cat regression.diffs

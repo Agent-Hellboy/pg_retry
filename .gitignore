@@ -27,10 +27,12 @@
 *.so
 *.so.*
 *.dylib
+results/
 
 # Executables
 *.exe
 *.out
+!expected/*.out
 *.app
 *.i*86
 *.x86_64
