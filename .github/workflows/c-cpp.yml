@@ -1,75 +1,40 @@
-name: PostgreSQL Extension CI
+name: build
 
-# Tests the pg_retry PostgreSQL extension across multiple PostgreSQL versions
-# Builds the extension, installs it, and runs regression tests
-
-on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+on: [push, pull_request]
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-
+  ubuntu:
+    runs-on: ${{ matrix.os }}
+    if: ${{ !startsWith(github.ref_name, 'mac') && !startsWith(github.ref_name, 'windows') }}
     strategy:
-      fail-fast: false  # Don't cancel other jobs if one fails
+      fail-fast: false
       matrix:
-        postgresql: [14, 15, 16, 17]
-        # PostgreSQL 18 can be added when stable packages become available
+        include:
+          - postgres: 19
+            os: ubuntu-24.04
+          - postgres: 18
+            os: ubuntu-24.04
+          - postgres: 17
+            os: ubuntu-24.04
+          - postgres: 16
+            os: ubuntu-24.04
+          - postgres: 15
+            os: ubuntu-22.04
+          - postgres: 14
+            os: ubuntu-22.04
 
     steps:
-    - uses: actions/checkout@v4
-
-    - name: Install PostgreSQL and build extension
-      run: |
-        # Add PostgreSQL APT repository
-        sudo apt-get install -y wget ca-certificates gnupg lsb-release
-        wget -O- https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor | sudo tee /usr/share/keyrings/postgresql.gpg > /dev/null
-        echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg arch=$(dpkg --print-architecture)] http://apt.postgresql.org/pub/repos/apt/ $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/postgresql.list
-        sudo apt-get update
-
-        # Install PostgreSQL and development packages
-        sudo apt-get install -y postgresql-${{ matrix.postgresql }} postgresql-server-dev-${{ matrix.postgresql }} build-essential
-
-        # Start PostgreSQL
-        sudo systemctl start postgresql@${{ matrix.postgresql }} || sudo -u postgres /usr/lib/postgresql/${{ matrix.postgresql }}/bin/pg_ctl -D /var/lib/postgresql/${{ matrix.postgresql }}/main -l /var/log/postgresql/postgresql-${{ matrix.postgresql }}-main.log start
-
-        # Wait for PostgreSQL to be ready
-        export PATH="/usr/lib/postgresql/${{ matrix.postgresql }}/bin:$PATH"
-        until pg_isready -h localhost; do
-          echo "Waiting for PostgreSQL..."
-          sleep 2
-        done
-        echo "PostgreSQL is ready!"
-
-        # Create test database
-        sudo -u postgres psql -c "CREATE DATABASE pg_retry_test;"
-
-        # Build extension
-        export PG_CONFIG="/usr/lib/postgresql/${{ matrix.postgresql }}/bin/pg_config"
-        make clean
-        make
-
-        # Install extension
-        sudo make install
-
-        # Verify extension installation
-        psql -U postgres -d pg_retry_test -c "SELECT * FROM pg_available_extensions WHERE name = 'pg_retry';"
-
-        # Run regression tests
-        export PGHOST=localhost
-        export PGUSER=postgres
-        export PGDATABASE=pg_retry_test
-        make installcheck
-
-    - name: Upload test results
-      if: failure()
-      uses: actions/upload-artifact@v4
-      with:
-        name: test-results-pg${{ matrix.postgresql }}
-        path: |
-          regression.diffs
-          regression.out
-          results/
+      - uses: actions/checkout@v5
+      - uses: ankane/setup-postgres@v1
+        with:
+          postgres-version: ${{ matrix.postgres }}
+          dev-files: true
+      - run: make
+        env:
+          PG_CFLAGS: -DUSE_ASSERT_CHECKING -Wall -Wextra -Werror -Wno-unused-parameter -Wno-sign-compare ${{ matrix.postgres >= 18 && '-Wno-missing-field-initializers' || '' }}
+      - run: |
+          export PG_CONFIG=`which pg_config`
+          sudo --preserve-env=PG_CONFIG make install
+      - run: make installcheck
+      - if: ${{ failure() }}
+        run: cat regression.diffs
