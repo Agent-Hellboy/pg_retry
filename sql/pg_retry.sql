@@ -40,5 +40,18 @@ SELECT retry.retry('SELECT 1', 3, -1);
 -- Test 12: Test base_delay > max_delay (should fail)
 SELECT retry.retry('SELECT 1', 3, 100, 50);
 
+-- Test 13: Allow semicolons in string literals
+SELECT retry.retry('SELECT ''a;b;c''');
+
+-- Test 14: Allow semicolons in JSON values
+SELECT retry.retry('SELECT json_build_object(''key'', ''value;with;semicolons'')');
+
+-- Test 15: Allow semicolons in comments
+SELECT retry.retry('-- This comment has ; in it
+SELECT 42');
+
+-- Test 16: Still reject actual multiple statements
+SELECT retry.retry('SELECT 1; SELECT 2');
+
 -- Clean up
 DROP TABLE test_retry_table;

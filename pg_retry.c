@@ -10,6 +10,10 @@
 #include "access/xact.h"
 #include "utils/memutils.h"
 #include "utils/errcodes.h"
+#include "tcop/tcopprot.h"
+#include "parser/parser.h"
+#include "nodes/parsenodes.h"
+#include "nodes/nodes.h"
 #include <math.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -20,6 +24,12 @@ PG_MODULE_MAGIC;
 static int pg_retry_default_max_tries = 3;
 static int pg_retry_default_base_delay_ms = 50;
 static int pg_retry_default_max_delay_ms = 1000;
+/* Default SQLSTATEs to retry on 
+40001: serialization_failure
+40P01: deadlock_detected
+55P03: lock_not_available
+57014: query_canceled (e.g., statement_timeout)
+*/
 static char *pg_retry_default_sqlstates_str = "40001,40P01,55P03,57014";
 
 /* Function declarations */
@@ -28,13 +38,13 @@ extern void _PG_init(void);
 
 /* Helper functions */
 static bool is_retryable_sqlstate(const char *sqlstate, ArrayType *retry_sqlstates);
-static bool contains_transaction_control(const char *sql);
-static bool is_single_statement(const char *sql);
+static bool contains_transaction_control(List *parsetree_list);
+static bool is_single_statement(const char *sql, List **parsed_tree);
 static long calculate_delay(int attempt, int base_delay_ms, int max_delay_ms);
-static void validate_sql(const char *sql);
+static void validate_sql(const char *sql, List **parsed_tree);
 
 /*
- * Check if a SQLSTATE is in the retry list
+ * Check if a SQLSTATE is in the retry list, NOTE: SQLSTATEs are assigned at runtime by PostgreSQL
  */
 static bool
 is_retryable_sqlstate(const char *sqlstate, ArrayType *retry_sqlstates)
@@ -70,73 +80,81 @@ is_retryable_sqlstate(const char *sqlstate, ArrayType *retry_sqlstates)
 }
 
 /*
- * Check if SQL contains transaction control statements
+ * Check if parsed statement is a transaction control statement
  */
 static bool
-contains_transaction_control(const char *sql)
+contains_transaction_control(List *parsetree_list)
 {
-    const char *keywords[] = {"BEGIN", "COMMIT", "ROLLBACK", "SAVEPOINT", "RELEASE", "ABORT", NULL};
-    char *upper_sql = pstrdup(sql);
-    char *ptr = upper_sql;
-    int i;
+    RawStmt *raw_stmt;
 
-    /* Convert to uppercase for case-insensitive matching */
-    while (*ptr)
-    {
-        *ptr = toupper((unsigned char)*ptr);
-        ptr++;
-    }
+    if (parsetree_list == NULL || list_length(parsetree_list) != 1)
+        return false;
 
-    for (i = 0; keywords[i] != NULL; i++)
-    {
-        if (strstr(upper_sql, keywords[i]) != NULL)
-        {
-            pfree(upper_sql);
-            return true;
-        }
-    }
+    raw_stmt = (RawStmt *) linitial(parsetree_list);
 
-    pfree(upper_sql);
+    /* Check if the statement is a transaction control command */
+    if (IsA(raw_stmt->stmt, TransactionStmt))
+        return true;
+
     return false;
 }
 
 /*
- * Check if SQL contains exactly one statement (no multiple statements)
+ * Check if SQL contains exactly one statement using PostgreSQL parser
  */
 static bool
-is_single_statement(const char *sql)
+is_single_statement(const char *sql, List **parsed_tree)
 {
-    const char *ptr = sql;
+    List *raw_parsetree_list;
 
-    while (*ptr)
-    {
-        if (*ptr == ';')
-        {
-            /* For now, disallow any semicolons to prevent multiple statements */
-            /* TODO: Implement proper SQL statement parsing */
-            return false;
-        }
-        ptr++;
-    }
+    /* Parse the SQL using PostgreSQL's query parser */
+    raw_parsetree_list = pg_parse_query(sql);
 
-    return true;
+    /* Store the parsed tree for later use */
+    if (parsed_tree != NULL)
+        *parsed_tree = raw_parsetree_list;
+
+    /* Check if we have exactly one statement */
+    return (list_length(raw_parsetree_list) == 1);
 }
 
 /*
- * Validate SQL input
+ * Validate SQL input before execution
+ *
+ * Performs pre-execution validation to ensure SQL safety and correctness:
+ * 1. Parse the SQL and verify it contains exactly one statement
+ * 2. Check if the statement is a transaction control command (not allowed)
+ *
+ * The validation uses PostgreSQL's parser to properly handle SQL syntax,
+ * including semicolons within string literals, comments, and JSON values.
+ *
+ * Parameters:
+ * - sql: the SQL string to validate
+ * - parsed_tree: pointer to store the parsed statement tree for reuse
+ *
+ * Returns:
+ * - void (success) or raises an error if validation fails
+ *
+ * Errors:
+ * - SYNTAX_ERROR: if SQL contains multiple statements or parsing fails
+ * - FEATURE_NOT_SUPPORTED: if SQL contains transaction control statements
+
+ *
+ * NOTE: We use SPI to execute SQL queries within subtransactions so that
+ * errors can be captured and retried without propagating further.
  */
 static void
-validate_sql(const char *sql)
+validate_sql(const char *sql, List **parsed_tree)
 {
-    if (contains_transaction_control(sql))
-        ereport(ERROR,
-                (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                 errmsg("pg_retry: transaction control statements are not allowed")));
-
-    if (!is_single_statement(sql))
+    if (!is_single_statement(sql, parsed_tree))
         ereport(ERROR,
                 (errcode(ERRCODE_SYNTAX_ERROR),
                  errmsg("pg_retry: SQL must contain exactly one statement")));
+
+    if (contains_transaction_control(*parsed_tree))
+        ereport(ERROR,
+                (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                 errmsg("pg_retry: transaction control statements are not allowed")));
 }
 
 /*
@@ -216,7 +234,8 @@ pg_retry_retry(PG_FUNCTION_ARGS)
                 (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                  errmsg("pg_retry: base_delay_ms cannot be greater than max_delay_ms")));
 
-    validate_sql(sql);
+    List *parsed_tree = NIL;
+    validate_sql(sql, &parsed_tree);
 
     /* Connect to SPI */
     if (SPI_connect_ext(SPI_OPT_NONATOMIC) != SPI_OK_CONNECT)
