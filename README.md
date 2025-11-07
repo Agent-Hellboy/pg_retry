@@ -20,7 +20,7 @@ A PostgreSQL extension that provides retry functionality for SQL statements on t
 
 ### Prerequisites
 
-- PostgreSQL 14+
+- PostgreSQL 16+
 - C compiler and build tools
 
 ### Build and Install
