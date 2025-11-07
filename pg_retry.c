@@ -252,8 +252,8 @@ pg_retry_retry(PG_FUNCTION_ARGS)
         PG_CATCH();
         {
             ErrorData *errdata = CopyErrorData();
-            FlushErrorState();
             volatile bool should_retry = false;
+            FlushErrorState();
 
             /* Rollback subtransaction */
             RollbackAndReleaseCurrentSubTransaction();
