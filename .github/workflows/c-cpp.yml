@@ -24,11 +24,14 @@ jobs:
         image: postgres:${{ matrix.postgresql }}
         env:
           POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+        ports:
+          - 5432:5432
 
     steps:
     - uses: actions/checkout@v4
@@ -40,11 +43,20 @@ jobs:
         wget -O- https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor | sudo tee /usr/share/keyrings/postgresql.gpg > /dev/null
         echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg arch=$(dpkg --print-architecture)] http://apt.postgresql.org/pub/repos/apt/ $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/postgresql.list
         sudo apt-get update
-        sudo apt-get install -y postgresql-server-dev-${{ matrix.postgresql }} build-essential
+        sudo apt-get install -y postgresql-server-dev-${{ matrix.postgresql }} postgresql-client-${{ matrix.postgresql }} build-essential
+
+    - name: Wait for PostgreSQL to be ready
+      run: |
+        export PATH="/usr/lib/postgresql/${{ matrix.postgresql }}/bin:$PATH"
+        until pg_isready -h localhost -p 5432; do
+          echo "Waiting for PostgreSQL..."
+          sleep 2
+        done
+        echo "PostgreSQL is ready!"
 
     - name: Create test database
       run: |
-        PGPASSWORD=postgres psql -h postgres -U postgres -c "CREATE DATABASE pg_retry_test;"
+        PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -c "CREATE DATABASE pg_retry_test;"
 
     - name: Build extension
       run: |
@@ -60,13 +72,14 @@ jobs:
 
     - name: Verify extension installation
       run: |
-        PGPASSWORD=postgres psql -h postgres -U postgres -d pg_retry_test -c "SELECT * FROM pg_available_extensions WHERE name = 'pg_retry';"
+        PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -d pg_retry_test -c "SELECT * FROM pg_available_extensions WHERE name = 'pg_retry';"
 
     - name: Run regression tests
       run: |
         export PATH="/usr/lib/postgresql/${{ matrix.postgresql }}/bin:$PATH"
         export PG_CONFIG="/usr/lib/postgresql/${{ matrix.postgresql }}/bin/pg_config"
-        export PGHOST=postgres
+        export PGHOST=localhost
+        export PGPORT=5432
         export PGUSER=postgres
         export PGPASSWORD=postgres
         export PGDATABASE=pg_retry_test
