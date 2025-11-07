@@ -24,6 +24,7 @@ static char *pg_retry_default_sqlstates_str = "40001,40P01,55P03,57014";
 
 /* Function declarations */
 PG_FUNCTION_INFO_V1(pg_retry_retry);
+extern void _PG_init(void);
 
 /* Helper functions */
 static bool is_retryable_sqlstate(const char *sqlstate, ArrayType *retry_sqlstates);
@@ -170,8 +171,8 @@ pg_retry_retry(PG_FUNCTION_ARGS)
     char *sql;
     int attempt;
     int spi_result;
-    int processed_rows = 0;
-    bool success = false;
+    volatile int processed_rows = 0;
+    volatile bool success = false;
     ErrorData *last_error = NULL;
 
     /* Extract arguments */

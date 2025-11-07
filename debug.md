@@ -214,6 +214,12 @@ psql postgres -c "DROP EXTENSION IF EXISTS pg_retry; CREATE EXTENSION pg_retry;"
 **Cause:** Semicolon counting logic was flawed - allowed multiple statements with single semicolon
 **Fix:** Simplified to reject any SQL containing semicolons (conservative approach)
 
+### Compiler Warning Fixes
+**Issue:** Compilation failed with strict CI flags (`-Werror -DUSE_ASSERT_CHECKING`)
+**Fixes Applied:**
+- Added prototype for `_PG_init()` function
+- Marked variables `processed_rows` and `success` as `volatile` to prevent clobbered warnings in PG_TRY/PG_CATCH blocks
+
 ### Extension Not Loading
 ```sql
 -- Check if extension exists
