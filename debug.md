@@ -220,6 +220,11 @@ psql postgres -c "DROP EXTENSION IF EXISTS pg_retry; CREATE EXTENSION pg_retry;"
 - Added prototype for `_PG_init()` function
 - Marked variables `processed_rows` and `success` as `volatile` to prevent clobbered warnings in PG_TRY/PG_CATCH blocks
 
+### SQLSTATE Handling Fix
+**Issue:** SQLSTATE codes were not being unpacked correctly, preventing retry logic from working
+**Root Cause:** Used `sprintf("%05d", errdata->sqlerrcode)` which gives packed integer, not 5-char SQLSTATE string
+**Fix:** Used PostgreSQL's `unpack_sql_state()` function and added `FlushErrorState()` call
+
 ### Extension Not Loading
 ```sql
 -- Check if extension exists

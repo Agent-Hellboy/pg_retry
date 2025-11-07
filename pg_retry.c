@@ -252,7 +252,8 @@ pg_retry_retry(PG_FUNCTION_ARGS)
         PG_CATCH();
         {
             ErrorData *errdata = CopyErrorData();
-            bool should_retry = false;
+            FlushErrorState();
+            volatile bool should_retry = false;
 
             /* Rollback subtransaction */
             RollbackAndReleaseCurrentSubTransaction();
@@ -260,8 +261,7 @@ pg_retry_retry(PG_FUNCTION_ARGS)
             /* Check if this is a retryable error */
             if (errdata->sqlerrcode != 0)
             {
-                char sqlstate[6];
-                sprintf(sqlstate, "%05d", errdata->sqlerrcode);
+                const char *sqlstate = unpack_sql_state(errdata->sqlerrcode);
 
                 if (is_retryable_sqlstate(sqlstate, retry_sqlstates))
                 {
