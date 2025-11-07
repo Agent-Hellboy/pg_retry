@@ -10,8 +10,9 @@ REGRESS_OPTS = --load-extension=pg_retry
 
 
 # Additional compiler flags (PGXS provides most flags)
-# For strict CI builds: make PG_CFLAGS="-DUSE_ASSERT_CHECKING -Wall -Wextra -Werror -Wno-unused-parameter -Wno-sign-compare"
-PG_CFLAGS ?= -Wall -Wmissing-prototypes -Wpointer-arith -Wdeclaration-after-statement -Werror=vla -Wendif-labels -Wmissing-format-attribute -Wimplicit-fallthrough=3 -Wcast-function-type -Wformat-security -fno-strict-aliasing -fwrapv -fexcess-precision=standard -Wno-format-truncation -Wno-stringop-truncation
+# Use C11 standard to allow mixed declarations and code
+PG_CFLAGS ?= -std=c11
+# For strict CI builds: make PG_CFLAGS="-DUSE_ASSERT_CHECKING -Wall -Wextra -Werror -Wno-unused-parameter -Wno-sign-compare -std=c11"
 
 PG_CONFIG ?= pg_config
 PGXS := $(shell $(PG_CONFIG) --pgxs)

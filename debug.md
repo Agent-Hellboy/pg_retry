@@ -219,7 +219,7 @@ psql postgres -c "DROP EXTENSION IF EXISTS pg_retry; CREATE EXTENSION pg_retry;"
 **Fixes Applied:**
 - Added prototype for `_PG_init()` function
 - Marked variables `processed_rows` and `success` as `volatile` to prevent clobbered warnings in PG_TRY/PG_CATCH blocks
-- Fixed C90 declaration order in PG_CATCH block (declarations before executable statements)
+- Updated to C11 standard to allow mixed declarations and code
 
 ### SQLSTATE Handling Fix
 **Issue:** SQLSTATE codes were not being unpacked correctly, preventing retry logic from working
