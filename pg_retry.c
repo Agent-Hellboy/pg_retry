@@ -191,7 +191,8 @@ pg_retry_retry(PG_FUNCTION_ARGS)
     int spi_result;
     volatile int processed_rows = 0;
     volatile bool success = false;
-    ErrorData *last_error = NULL;
+    volatile ErrorData *last_error = NULL;
+    List *parsed_tree = NIL;
 
     /* Extract arguments */
     if (PG_ARGISNULL(0))
@@ -234,7 +235,6 @@ pg_retry_retry(PG_FUNCTION_ARGS)
                 (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                  errmsg("pg_retry: base_delay_ms cannot be greater than max_delay_ms")));
 
-    List *parsed_tree = NIL;
     validate_sql(sql, &parsed_tree);
 
     /* Connect to SPI */
@@ -271,8 +271,8 @@ pg_retry_retry(PG_FUNCTION_ARGS)
         PG_CATCH();
         {
             ErrorData *errdata = CopyErrorData();
+            bool should_retry = false;
             FlushErrorState();
-            volatile bool should_retry = false;
 
             /* Rollback subtransaction */
             RollbackAndReleaseCurrentSubTransaction();
@@ -299,7 +299,7 @@ pg_retry_retry(PG_FUNCTION_ARGS)
             {
                 /* Either not retryable or exhausted attempts - save error for rethrow */
                 if (last_error)
-                    FreeErrorData(last_error);
+                    FreeErrorData((ErrorData *)last_error);
                 last_error = errdata;
             }
             else
@@ -335,7 +335,7 @@ pg_retry_retry(PG_FUNCTION_ARGS)
         /* Rethrow the last error */
         if (last_error)
         {
-            ReThrowError(last_error);
+            ReThrowError((ErrorData *)last_error);
         }
         else
         {
