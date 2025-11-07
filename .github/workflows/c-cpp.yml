@@ -1,4 +1,7 @@
-name: C/C++ CI
+name: PostgreSQL Extension CI
+
+# Tests the pg_retry PostgreSQL extension across multiple PostgreSQL versions
+# Builds the extension, installs it, and runs regression tests
 
 on:
   push:
@@ -7,17 +10,68 @@ on:
     branches: [ "main" ]
 
 jobs:
-  build:
-
+  test:
     runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        postgresql: [14, 15, 16, 17, 18]
+
+    services:
+      postgres:
+        image: postgres:${{ matrix.postgresql }}
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
     - uses: actions/checkout@v4
-    - name: configure
-      run: ./configure
-    - name: make
-      run: make
-    - name: make check
-      run: make check
-    - name: make distcheck
-      run: make distcheck
+
+    - name: Install PostgreSQL development headers
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y postgresql-server-dev-${{ matrix.postgresql }} build-essential
+
+    - name: Create test database
+      run: |
+        PGPASSWORD=postgres psql -h postgres -U postgres -c "CREATE DATABASE pg_retry_test;"
+
+    - name: Build extension
+      run: |
+        export PATH="/usr/lib/postgresql/${{ matrix.postgresql }}/bin:$PATH"
+        export PG_CONFIG="/usr/lib/postgresql/${{ matrix.postgresql }}/bin/pg_config"
+        make clean
+        make
+
+    - name: Install extension
+      run: |
+        export PATH="/usr/lib/postgresql/${{ matrix.postgresql }}/bin:$PATH"
+        sudo make install
+
+    - name: Verify extension installation
+      run: |
+        PGPASSWORD=postgres psql -h postgres -U postgres -d pg_retry_test -c "SELECT * FROM pg_available_extensions WHERE name = 'pg_retry';"
+
+    - name: Run regression tests
+      run: |
+        export PATH="/usr/lib/postgresql/${{ matrix.postgresql }}/bin:$PATH"
+        export PG_CONFIG="/usr/lib/postgresql/${{ matrix.postgresql }}/bin/pg_config"
+        export PGHOST=postgres
+        export PGUSER=postgres
+        export PGPASSWORD=postgres
+        export PGDATABASE=pg_retry_test
+        make installcheck
+
+    - name: Upload test results
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results-pg${{ matrix.postgresql }}
+        path: |
+          regression.diffs
+          regression.out
+          results/
