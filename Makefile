@@ -10,8 +10,9 @@ REGRESS_OPTS = --load-extension=pg_retry
 
 
 # Additional compiler flags (PGXS provides most flags)
-# Use strict CI flags for high-quality builds
-PG_CFLAGS = -DUSE_ASSERT_CHECKING -Wall -Wextra -Werror -Wno-unused-parameter -Wno-sign-compare -std=c11
+PG_CFLAGS = -DUSE_ASSERT_CHECKING -Wall -Wextra -Werror -Wno-unused-parameter -Wno-sign-compare -std=c11 \
+	-Wimplicit-fallthrough -g -O2 -fno-omit-frame-pointer \
+	-fstack-protector-strong -D_FORTIFY_SOURCE=3
 
 PG_CONFIG ?= pg_config
 PGXS := $(shell $(PG_CONFIG) --pgxs)

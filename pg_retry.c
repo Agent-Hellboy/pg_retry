@@ -191,7 +191,6 @@ pg_retry_retry(PG_FUNCTION_ARGS)
     int spi_result;
     volatile int processed_rows = 0;
     volatile bool success = false;
-    volatile ErrorData *last_error = NULL;
     List *parsed_tree = NIL;
 
     /* Extract arguments */
@@ -297,10 +296,8 @@ pg_retry_retry(PG_FUNCTION_ARGS)
 
             if (!should_retry || attempt == max_tries)
             {
-                /* Either not retryable or exhausted attempts - save error for rethrow */
-                if (last_error)
-                    FreeErrorData((ErrorData *)last_error);
-                last_error = errdata;
+                /* Either not retryable or exhausted attempts - rethrow immediately */
+                PG_RE_THROW();
             }
             else
             {
@@ -332,17 +329,10 @@ pg_retry_retry(PG_FUNCTION_ARGS)
     }
     else
     {
-        /* Rethrow the last error */
-        if (last_error)
-        {
-            ReThrowError((ErrorData *)last_error);
-        }
-        else
-        {
-            ereport(ERROR,
-                    (errcode(ERRCODE_INTERNAL_ERROR),
-                     errmsg("pg_retry: all retry attempts failed")));
-        }
+        /* Should not reach here - errors should be rethrown in PG_CATCH */
+        ereport(ERROR,
+                (errcode(ERRCODE_INTERNAL_ERROR),
+                 errmsg("pg_retry: unexpected error state")));
     }
 
     /* Should never reach here */
