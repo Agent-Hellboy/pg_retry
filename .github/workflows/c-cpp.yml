@@ -14,8 +14,10 @@ jobs:
     runs-on: ubuntu-latest
 
     strategy:
+      fail-fast: false  # Don't cancel other jobs if one fails
       matrix:
-        postgresql: [14, 15, 16, 17, 18]
+        postgresql: [14, 15, 16, 17]
+        # PostgreSQL 18 can be added when postgres:18 Docker image becomes available
 
     services:
       postgres:
