@@ -17,71 +17,50 @@ jobs:
       fail-fast: false  # Don't cancel other jobs if one fails
       matrix:
         postgresql: [14, 15, 16, 17]
-        # PostgreSQL 18 can be added when postgres:18 Docker image becomes available
-
-    services:
-      postgres:
-        image: postgres:${{ matrix.postgresql }}
-        env:
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: postgres
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
+        # PostgreSQL 18 can be added when stable packages become available
 
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install PostgreSQL development headers
+    - name: Install PostgreSQL and build extension
       run: |
-        # Add PostgreSQL APT repository for newer versions
+        # Add PostgreSQL APT repository
         sudo apt-get install -y wget ca-certificates gnupg lsb-release
         wget -O- https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor | sudo tee /usr/share/keyrings/postgresql.gpg > /dev/null
         echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg arch=$(dpkg --print-architecture)] http://apt.postgresql.org/pub/repos/apt/ $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/postgresql.list
         sudo apt-get update
-        sudo apt-get install -y postgresql-server-dev-${{ matrix.postgresql }} postgresql-client-${{ matrix.postgresql }} build-essential
 
-    - name: Wait for PostgreSQL to be ready
-      run: |
+        # Install PostgreSQL and development packages
+        sudo apt-get install -y postgresql-${{ matrix.postgresql }} postgresql-server-dev-${{ matrix.postgresql }} build-essential
+
+        # Start PostgreSQL
+        sudo systemctl start postgresql@${{ matrix.postgresql }} || sudo -u postgres /usr/lib/postgresql/${{ matrix.postgresql }}/bin/pg_ctl -D /var/lib/postgresql/${{ matrix.postgresql }}/main -l /var/log/postgresql/postgresql-${{ matrix.postgresql }}-main.log start
+
+        # Wait for PostgreSQL to be ready
         export PATH="/usr/lib/postgresql/${{ matrix.postgresql }}/bin:$PATH"
-        until pg_isready -h localhost -p 5432; do
+        until pg_isready -h localhost; do
           echo "Waiting for PostgreSQL..."
           sleep 2
         done
         echo "PostgreSQL is ready!"
 
-    - name: Create test database
-      run: |
-        PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -c "CREATE DATABASE pg_retry_test;"
+        # Create test database
+        sudo -u postgres psql -c "CREATE DATABASE pg_retry_test;"
 
-    - name: Build extension
-      run: |
-        export PATH="/usr/lib/postgresql/${{ matrix.postgresql }}/bin:$PATH"
+        # Build extension
         export PG_CONFIG="/usr/lib/postgresql/${{ matrix.postgresql }}/bin/pg_config"
         make clean
         make
 
-    - name: Install extension
-      run: |
-        export PATH="/usr/lib/postgresql/${{ matrix.postgresql }}/bin:$PATH"
+        # Install extension
         sudo make install
 
-    - name: Verify extension installation
-      run: |
-        PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -d pg_retry_test -c "SELECT * FROM pg_available_extensions WHERE name = 'pg_retry';"
+        # Verify extension installation
+        psql -U postgres -d pg_retry_test -c "SELECT * FROM pg_available_extensions WHERE name = 'pg_retry';"
 
-    - name: Run regression tests
-      run: |
-        export PATH="/usr/lib/postgresql/${{ matrix.postgresql }}/bin:$PATH"
-        export PG_CONFIG="/usr/lib/postgresql/${{ matrix.postgresql }}/bin/pg_config"
+        # Run regression tests
         export PGHOST=localhost
-        export PGPORT=5432
         export PGUSER=postgres
-        export PGPASSWORD=postgres
         export PGDATABASE=pg_retry_test
         make installcheck
 
