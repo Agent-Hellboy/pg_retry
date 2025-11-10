@@ -1,5 +1,5 @@
 # pg_retry extension
 comment = 'Retry SQL statements on transient errors with exponential backoff'
-default_version = '1.0'
+default_version = '1.0.0'
 module_pathname = '$libdir/pg_retry'
 relocatable = true
