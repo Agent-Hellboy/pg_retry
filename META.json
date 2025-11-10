@@ -1,0 +1,52 @@
+{
+   "name": "pg_retry",
+   "abstract": "Retry SQL statements on transient errors with exponential backoff",
+   "description": "pg_retry allows you to automatically retry SQL statements that fail due to transient errors such as serialization failures, deadlocks, lock timeouts, or query cancellations. It implements exponential backoff with jitter to avoid thundering herd problems.",
+   "version": "1.0.0",
+   "maintainer": [
+      "Prince Roshan princekrroshan01@gmail.com"
+   ],
+   "license": "postgresql",
+   "provides": {
+      "pg_retry": {
+         "abstract": "Retry SQL statements on transient errors with exponential backoff",
+         "file": "extension_sql/pg_retry--1.0.sql",
+         "docfile": "README.md",
+         "version": "1.0.0"
+      }
+   },
+   "prereqs": {
+      "runtime": {
+         "requires": {
+            "PostgreSQL": "16.0.0"
+         }
+      }
+   },
+   "resources": {
+      "homepage": "https://github.com/Agent-Hellboy/pg_retry",
+      "bugtracker": {
+         "web": "https://github.com/Agent-Hellboy/pg_retry/issues"
+      },
+      "repository": {
+        "url":  "git://github.com/Agent-Hellboy/pg_retry.git",
+        "web":  "https://github.com/Agent-Hellboy/pg_retry",
+        "type": "git"
+      }
+   },
+   "generated_by": "Prince Roshan",
+   "meta-spec": {
+      "version": "1.0.0",
+      "url": "https://pgxn.org/meta/spec.txt"
+   },
+   "tags": [
+      "retry",
+      "transient errors",
+      "exponential backoff",
+      "serialization failure",
+      "deadlock",
+      "lock timeout",
+      "query cancellation",
+      "error handling",
+      "reliability"
+   ]
+}

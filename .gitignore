@@ -1,57 +1,63 @@
-# Prerequisites
-*.d
-
-# Object files
+# Compiled binaries and object files
 *.o
-*.ko
-*.obj
-*.elf
-
-# Linker output
-*.ilk
-*.map
-*.exp
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Libraries
-*.lib
-*.a
-*.la
-*.lo
-
-# Shared objects (inc. Windows DLLs)
-*.dll
 *.so
-*.so.*
 *.dylib
+*.dll
+*.bc
+
+# PostgreSQL extension build artifacts
+extension_sql/*--*.sql
+
+# Distribution files
+*.tar.gz
+dist/
+
+# Test results and logs
 results/
+regression.diffs
+regression.out
+tmp_check/
+tmp_check_iso/
+log/
+output_iso/
 
-# Executables
-*.exe
-*.out
-!expected/*.out
-*.app
-*.i*86
-*.x86_64
-*.hex
+# macOS
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 
-# Debug files
-*.dSYM/
-*.su
-*.idb
-*.pdb
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
 
-# Kernel Module Compile Results
-*.mod*
-*.cmd
-.tmp_versions/
-modules.order
-Module.symvers
-Mkfile.old
-dkms.conf
+# Linux
+*~
+.directory
+.Trash-*
 
-# debug information files
-*.dwo
+# IDE/Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Build directories
+build/
+cmake-build-*/
+
+# Temporary files
+*.tmp
+*.bak
+*.orig
+
+# Log files
+*.log
+
+# PostgreSQL regression test artifacts
+regress_log
+regress_status
