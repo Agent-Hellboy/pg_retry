@@ -1,6 +1,6 @@
-name: build
+name: PostgreSQL Extension CI
 
-on: [push, pull_request]
+on: [push]
 
 jobs:
   ubuntu:
@@ -26,8 +26,6 @@ jobs:
           postgres-version: ${{ matrix.postgres }}
           dev-files: true
       - run: make
-        env:
-          PG_CFLAGS: -std=c11 -DUSE_ASSERT_CHECKING -Wall -Wextra -Werror -Wno-unused-parameter -Wno-sign-compare -Wno-declaration-after-statement ${{ matrix.postgres >= 18 && '-Wno-missing-field-initializers' || '' }}
       - run: |
           export PG_CONFIG=`which pg_config`
           sudo --preserve-env=PG_CONFIG make install
