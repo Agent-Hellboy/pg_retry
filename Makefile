@@ -7,7 +7,7 @@ EXTVERSION   = $(shell grep -m 1 '[[:space:]]\{8\}"version":' META.json | \
 DISTVERSION  = $(shell grep -m 1 '[[:space:]]\{3\}"version":' META.json | \
                sed -e 's/[[:space:]]*"version":[[:space:]]*"\([^"]*\)",\{0,1\}/\1/')
 
-DATA 		    = $(wildcard sql/*--*.sql)
+DATA 		    = $(wildcard extension_sql/*--*.sql)
 
 TESTS        = $(wildcard test/sql/*.sql)
 
@@ -21,7 +21,7 @@ PG_CONFIG   ?= pg_config
 
 PG91         = $(shell $(PG_CONFIG) --version | grep -qE " 8\.| 9\.0" && echo no || echo yes)
 
-EXTRA_CLEAN = sql/$(EXTENSION)--$(EXTVERSION).sql
+EXTRA_CLEAN = extension_sql/$(EXTENSION)--$(EXTVERSION).sql
 
 # Additional compiler flags (PGXS provides most flags)
 PG_CFLAGS = -DUSE_ASSERT_CHECKING -Wall -Wextra -Werror -Wno-unused-parameter -Wno-sign-compare -std=c11 \
@@ -32,9 +32,9 @@ PGXS := $(shell $(PG_CONFIG) --pgxs)
 
 include $(PGXS)
 
-all: sql/$(EXTENSION)--$(EXTVERSION).sql
+all: extension_sql/$(EXTENSION)--$(EXTVERSION).sql
 
-sql/$(EXTENSION)--$(EXTVERSION).sql: sql/$(EXTENSION).sql
+extension_sql/$(EXTENSION)--$(EXTVERSION).sql: extension_sql/$(EXTENSION).sql
 	cp $< $@
 
 dist:

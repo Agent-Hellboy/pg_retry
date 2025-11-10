@@ -6,7 +6,7 @@
 *.bc
 
 # PostgreSQL extension build artifacts
-sql/*--*.sql
+extension_sql/*--*.sql
 
 # Distribution files
 *.tar.gz

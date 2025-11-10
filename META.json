@@ -10,7 +10,7 @@
    "provides": {
       "pg_retry": {
          "abstract": "Retry SQL statements on transient errors with exponential backoff",
-         "file": "sql/pg_retry--1.0.sql",
+         "file": "extension_sql/pg_retry--1.0.sql",
          "docfile": "README.md",
          "version": "1.0.0"
       }

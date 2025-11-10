@@ -11,7 +11,7 @@ CREATE OR REPLACE FUNCTION retry.retry(
   max_delay_ms INT DEFAULT 1000,     -- cap for exponential backoff
   retry_sqlstates TEXT[] DEFAULT ARRAY['40001','40P01','55P03','57014']
 ) RETURNS INT                       -- number of rows processed/returned by the statement
-AS '$libdir/pg_retry'
+AS '$libdir/pg_retry', 'pg_retry_retry'
 LANGUAGE C VOLATILE PARALLEL RESTRICTED;
 
 -- Grant usage on the schema
