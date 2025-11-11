@@ -1,11 +1,8 @@
-EXTENSION    = $(shell grep -m 1 '"name":' META.json | \
-               sed -e 's/[[:space:]]*"name":[[:space:]]*"\([^"]*\)",/\1/')
+EXTENSION    = $(shell python3 -c "import json; print(json.load(open('META.json'))['name'])")
 
-EXTVERSION   = $(shell grep -m 1 '[[:space:]]\{8\}"version":' META.json | \
-               sed -e 's/[[:space:]]*"version":[[:space:]]*"\([^"]*\)",\{0,1\}/\1/')
+EXTVERSION   = $(shell python3 -c "import json; meta=json.load(open('META.json')); ext=meta['name']; print(meta['provides'][ext]['version'])")
 
-DISTVERSION  = $(shell grep -m 1 '[[:space:]]\{3\}"version":' META.json | \
-               sed -e 's/[[:space:]]*"version":[[:space:]]*"\([^"]*\)",\{0,1\}/\1/')
+DISTVERSION  = $(shell python3 -c "import json; print(json.load(open('META.json'))['version'])")
 
 DATA 		    = $(wildcard extension_sql/*--*.sql)
 
@@ -19,12 +16,10 @@ MODULES      = $(patsubst %.c,%,$(wildcard src/*.c))
 
 PG_CONFIG   ?= pg_config
 
-PG91         = $(shell $(PG_CONFIG) --version | grep -qE " 8\.| 9\.0" && echo no || echo yes)
-
 EXTRA_CLEAN = extension_sql/$(EXTENSION)--$(EXTVERSION).sql
 
 # Additional compiler flags (PGXS provides most flags)
-PG_CFLAGS = -DUSE_ASSERT_CHECKING -Wall -Wextra -Werror -Wno-unused-parameter -Wno-sign-compare -std=c11 \
+PG_CFLAGS += -DUSE_ASSERT_CHECKING -Wall -Wextra -Werror -Wno-unused-parameter -Wno-sign-compare -std=c11 \
 	-Wimplicit-fallthrough -g -O2 -fno-omit-frame-pointer \
 	-fstack-protector-strong -D_FORTIFY_SOURCE=3
 
@@ -37,5 +32,10 @@ all: extension_sql/$(EXTENSION)--$(EXTVERSION).sql
 extension_sql/$(EXTENSION)--$(EXTVERSION).sql: extension_sql/$(EXTENSION).sql
 	cp $< $@
 
-dist:
-	git archive --format zip --prefix=$(EXTENSION)-$(DISTVERSION)/ -o $(EXTENSION)-$(DISTVERSION).zip HEAD
+dist: clean all
+	mkdir -p $(EXTENSION)-$(DISTVERSION)
+	cp -r extension_sql src test META.json Makefile pg_retry.control README.md LICENSE $(EXTENSION)-$(DISTVERSION)/
+	# Remove compiled binaries from distribution
+	rm -f $(EXTENSION)-$(DISTVERSION)/src/*.o $(EXTENSION)-$(DISTVERSION)/src/*.dylib
+	zip -r $(EXTENSION)-$(DISTVERSION).zip $(EXTENSION)-$(DISTVERSION)
+	rm -rf $(EXTENSION)-$(DISTVERSION)
