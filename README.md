@@ -23,6 +23,24 @@ A PostgreSQL extension that provides retry functionality for SQL statements on t
 - PostgreSQL 16+
 - C compiler and build tools
 
+### Install from PGXN
+
+Install the PGXN client if it is not already available on your system (choose whichever fits your environment):
+
+```bash
+pip install pgxnclient          # cross-platform
+brew install pgxnclient         # macOS with Homebrew
+apt-get install pgxnclient      # Debian/Ubuntu
+```
+
+Then install the published package directly from the PGXN registry:
+
+```bash
+pgxn install pg_retry
+```
+
+The distribution page with package metadata and downloadable artifacts is available at https://manager.pgxn.org/distributions/pg_retry/1.0.0.
+
 ### Build and Install
 
 ```bash
