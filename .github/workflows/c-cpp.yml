@@ -39,6 +39,16 @@ jobs:
           # Install Python dependencies for system tests
           pip install psycopg-binary pytest
 
+          # Install pgTAP for integration tests
+          echo "Installing pgTAP..."
+          git clone https://github.com/theory/pgtap.git pgtap-src
+          cd pgtap-src
+          make
+          sudo --preserve-env=PG_CONFIG make install
+          cd ..
+          rm -rf pgtap-src
+          echo "pgTAP installed successfully"
+
           # Check if pgreplay is already working
           if pgreplay --help >/dev/null 2>&1; then
             echo "pgreplay is already working - no installation needed"
