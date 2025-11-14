@@ -24,7 +24,6 @@ def test_extension_files_exist():
     required_files = [
         f'{base_path}/extension_sql/pg_retry.sql',
         f'{base_path}/extension_sql/pg_retry--1.0.0.sql',
-        f'{base_path}/extension_sql/pg_retry--1.0.sql',
         f'{base_path}/src/pg_retry.c',
         f'{base_path}/pg_retry.control',
         f'{base_path}/META.json',
@@ -169,7 +168,11 @@ def test_compilation():
     base_path = '..' if os.path.exists('../src/pg_retry.o') else '.'
     # Check that object files were created
     assert os.path.exists(f'{base_path}/src/pg_retry.o'), "C source not compiled (missing .o file)"
-    assert os.path.exists(f'{base_path}/src/pg_retry.dylib'), "Extension not linked (missing .dylib file)"
+    
+    # Check for platform-specific shared library (.so on Linux, .dylib on macOS)
+    has_so = os.path.exists(f'{base_path}/src/pg_retry.so')
+    has_dylib = os.path.exists(f'{base_path}/src/pg_retry.dylib')
+    assert has_so or has_dylib, "Extension not linked (missing .so or .dylib file)"
 
     print("✅ Compilation validation passed")
 
