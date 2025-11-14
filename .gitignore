@@ -61,3 +61,13 @@ cmake-build-*/
 # PostgreSQL regression test artifacts
 regress_log
 regress_status
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+venv/
+.venv/
+*.egg-info/
+.pytest_cache/
