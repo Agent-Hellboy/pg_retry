@@ -58,7 +58,7 @@ build_sqlstate_array(const char *csv)
     int count = 0;
     Datum *elements;
     int idx = 0;
-    ArrayType *array;
+    ArrayType *volatile array;
 
     if (csv == NULL || *csv == '\0')
         return construct_empty_array(TEXTOID);
@@ -263,7 +263,7 @@ pg_retry_retry(PG_FUNCTION_ARGS)
     List *parsed_tree = NIL;
     MemoryContext retry_context = CurrentMemoryContext;
     ResourceOwner retry_owner = CurrentResourceOwner;
-    bool default_sqlstates = false;
+    volatile bool default_sqlstates = false;
 
     /* Extract arguments */
     if (PG_ARGISNULL(0))
