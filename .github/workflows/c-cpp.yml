@@ -32,3 +32,49 @@ jobs:
       - run: make installcheck
       - if: ${{ failure() }}
         run: cat regression.diffs
+
+      # System Tests with full dependencies
+      - name: Install system test dependencies
+        run: |
+          # Install Python dependencies for system tests
+          pip install psycopg-binary pytest
+
+          # Check if pgreplay is already working
+          if pgreplay --help >/dev/null 2>&1; then
+            echo "pgreplay is already working - no installation needed"
+          else
+            echo "pgreplay not working, attempting installation..."
+            # Try to install pgreplay (may not be available in all environments)
+            sudo apt-get update || true
+            if sudo apt-get install -y pgreplay 2>/dev/null; then
+              echo "pgreplay installed via apt"
+            else
+              echo "apt pgreplay failed, trying manual installation..."
+              # Clone and build pgreplay manually
+              git clone https://github.com/laurenz/pgreplay.git pgreplay-src || echo "Failed to clone pgreplay"
+              cd pgreplay-src || exit 1
+              ./configure LDFLAGS="-L$(pg_config --libdir)" CPPFLAGS="-I$(pg_config --includedir)" || echo "pgreplay configure failed"
+              make && sudo make install && echo "pgreplay installed manually" || echo "pgreplay manual install failed"
+              cd ..
+            fi
+          fi
+
+      - name: Create test log for pgreplay
+        run: |
+          # Create a simple test log file for pgreplay testing
+          echo "test log for pgreplay" > /tmp/test_pg_log.log
+
+      - name: Run full system tests
+        run: make systemtest SYSTEMTEST_SKIP_INSTALL=1
+        env:
+          # Enable all system test suites
+          SYSTEMTEST_PYTEST_FLAGS: --all
+          # pgreplay configuration (will skip gracefully if pgreplay not available)
+          PGREPLAY_LOG: /tmp/test_pg_log.log
+          # Fault injection configuration (using built-in failure plans)
+          PG_FAULT_SQL: "SELECT retry.execute_failure_plan('test_fault')"
+          PG_FAULT_SQLSTATE: 40001
+          PG_FAULT_EXPECT_SUCCESS: false
+          PG_FAULT_MAX_TRIES: 2
+          PG_FAULT_BASE_DELAY_MS: 10
+          PG_FAULT_MAX_DELAY_MS: 100

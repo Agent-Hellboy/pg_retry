@@ -227,6 +227,29 @@ Run the regression tests:
 make installcheck
 ```
 
+## System Tests
+
+Use the system harness for concurrency, pgbench, and GUC coverage. This target
+spins up a disposable cluster, installs `pg_retry`, and runs the pytest suite in
+`system_tests/`:
+
+```bash
+make systemtest
+# include pgbench-heavy suites
+make systemtest SYSTEMTEST_PYTEST_FLAGS="--pgbench"
+# replay captured workloads
+make systemtest SYSTEMTEST_PYTEST_FLAGS="--pgreplay"
+# run dangerous fault-injection suites (requires env vars, see docs)
+make systemtest SYSTEMTEST_PYTEST_FLAGS="--faults"
+# skip reinstall when CI already ran `make install`
+make systemtest SYSTEMTEST_SKIP_INSTALL=1
+```
+
+See `system_tests/README.md` for details on prerequisites and the helper SQL.
+
+The test suite includes basic sanity checks. Future enhancements will expand testing capabilities as PostgreSQL internals are explored further. 
+
+
 ## License
 
 Copyright (c) 2025, Prince Roshan
