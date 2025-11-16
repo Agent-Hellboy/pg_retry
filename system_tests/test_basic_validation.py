@@ -200,8 +200,11 @@ if __name__ == '__main__':
         try:
             test_func()
             passed += 1
-        except Exception as e:
+        except AssertionError as e:
             print(f"❌ {test_func.__name__}: {e}")
+            failed += 1
+        except Exception as e:
+            print(f"❌ {test_func.__name__}: Unexpected error: {e}")
             failed += 1
 
     print()

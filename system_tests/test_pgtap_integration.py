@@ -4,24 +4,31 @@ pgTAP integration tests for pg_retry extension
 This module runs pgTAP SQL tests using the pgTAP binary directly.
 """
 
-import subprocess
-import pytest
 import os
+import subprocess
+
 import psycopg
+import pytest
+
+
+def ensure_pgtap_available(pg_cluster):
+    """Ensure pgTAP can be created in the target cluster or skip gracefully."""
+    with psycopg.connect(pg_cluster.dsn(), autocommit=True) as conn:
+        try:
+            conn.execute("CREATE EXTENSION IF NOT EXISTS pgtap")
+            conn.execute("SELECT plan(1)")
+            conn.execute("SELECT pass('pgTAP is working')")
+            conn.execute("SELECT * FROM finish()")
+        except psycopg.errors.UndefinedFile as exc:
+            pytest.skip(f"pgTAP extension is not installed in this environment: {exc}")
+        except psycopg.Error as exc:
+            pytest.fail(f"pgTAP setup failed for an unexpected reason: {exc}")
 
 
 @pytest.mark.pgtap
 def test_pgtap_setup_sql(pg_cluster):
     """Run pgTAP setup.sql tests."""
-    # Check if pgTAP is available by testing if we can create the extension and run a simple test
-    with psycopg.connect(pg_cluster.dsn()) as conn:
-        try:
-            conn.execute("CREATE EXTENSION IF NOT EXISTS pgtap")
-            result = conn.execute("SELECT plan(1)")
-            conn.execute("SELECT pass('pgTAP is working')")
-            conn.execute("SELECT * FROM finish()")
-        except psycopg.Error as e:
-            pytest.fail(f"pgTAP not available - pgTAP tests require pgTAP to be installed. Error: {e}")
+    ensure_pgtap_available(pg_cluster)
 
     # Change to pgtap directory
     old_cwd = os.getcwd()
@@ -60,7 +67,9 @@ def test_pgtap_setup_sql(pg_cluster):
 @pytest.mark.pgtap
 def test_pgtap_basic_functionality(pg_cluster):
     """Test that pgTAP can run basic tests."""
-    # Simple test to verify pgTAP is working
+    ensure_pgtap_available(pg_cluster)
     with psycopg.connect(pg_cluster.dsn()) as conn:
-        result = conn.execute("SELECT 1 as test").fetchone()
-        assert result[0] == 1, f"Unexpected query result: {result}"
+        result = conn.execute(
+            "SELECT extversion FROM pg_extension WHERE extname = 'pgtap'"
+        ).fetchone()
+        assert result is not None, "pgTAP extension should be installed but is missing"

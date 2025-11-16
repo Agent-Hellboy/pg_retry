@@ -1,5 +1,7 @@
 # pg_retry
 
+[![Build](https://github.com/Agent-Hellboy/pg_retry/actions/workflows/build.yml/badge.svg)](https://github.com/Agent-Hellboy/pg_retry/actions/workflows/build.yml)
+
 A PostgreSQL extension that provides retry functionality for SQL statements on transient errors with exponential backoff.
 
 ## Overview

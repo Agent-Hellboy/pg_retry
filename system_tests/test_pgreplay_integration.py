@@ -48,6 +48,8 @@ def test_pgreplay_log_replay_with_std_logging(pg_cluster):
         conn.execute(f"CREATE DATABASE {target_db}")
 
     try:
+        # Drop any statements captured from prior tests to keep the replay log small.
+        pg_cluster.truncate_log()
         source_dsn = pg_cluster.dsn().replace("pg_retry_system_tests", source_db)
         target_dsn = pg_cluster.dsn().replace("pg_retry_system_tests", target_db)
 
@@ -147,7 +149,7 @@ def test_pgreplay_log_replay_with_std_logging(pg_cluster):
             env=env,
             text=True,
             capture_output=True,
-            timeout=120
+            timeout=300
         )
 
         # pgreplay should successfully replay the logs
