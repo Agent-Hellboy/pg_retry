@@ -10,9 +10,9 @@ A PostgreSQL extension that provides retry functionality for SQL statements on t
 
 ## ⚠️ Caution
 
-**This is an exploration library.**
+**This is an exploration library. If you still want to use it, I want you to know that you are welcome.**
 
-I am not expecting contributions at this time, as this project serves as a personal exploration of PostgreSQL internals and extension development. However, comments and discussions are welcome.
+I'm not expecting any contributions at this time, because this project is a personal exploration of PostgreSQL internals and extension development. However, comments and discussions are welcome.
 
 This library intentionally violates a fundamental computer science principle: **making engineers explicitly aware of errors and failures**. By automatically retrying failed operations, it abstracts away transient errors that might contain valuable debugging information or indicate deeper systemic issues.
 
