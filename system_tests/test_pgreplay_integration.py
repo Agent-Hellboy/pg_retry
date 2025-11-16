@@ -131,26 +131,28 @@ def test_pgreplay_log_replay_with_std_logging(pg_cluster):
         env = pg_cluster.client_env()
         env["PGDATABASE"] = target_db
 
-        # Use -c flag for CSV files, no flag for regular log files
-        cmd = [
-            pgreplay_bin,
-            "-h", pg_cluster.host,
-            "-p", str(pg_cluster.port),
-            "-U", pg_cluster.user,
-        ]
+    # Use -c flag for CSV files, -j skips idle time so replay finishes quickly
+    cmd = [
+        pgreplay_bin,
+        "-h", pg_cluster.host,
+        "-p", str(pg_cluster.port),
+        "-U", pg_cluster.user,
+        "-j",
+    ]
 
         if log_file.suffix == '.csv':
             cmd.append("-c")
 
         cmd.append(str(log_file))
 
-        completed = subprocess.run(
-            cmd,
-            env=env,
-            text=True,
-            capture_output=True,
-            timeout=300
-        )
+            timeout_seconds = int(os.getenv("PG_REPLAY_TIMEOUT", "120"))
+            completed = subprocess.run(
+                cmd,
+                env=env,
+                text=True,
+                capture_output=True,
+                timeout=timeout_seconds
+            )
 
         # pgreplay should successfully replay the logs
         # Note: pgreplay may return non-zero even on success for some log formats

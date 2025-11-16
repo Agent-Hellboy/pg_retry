@@ -79,6 +79,7 @@ jobs:
         env:
           # Enable all system test suites
           SYSTEMTEST_PYTEST_FLAGS: --all
+          PG_REPLAY_TIMEOUT: 60
           # pgreplay configuration (will skip gracefully if pgreplay not available)
           PGREPLAY_LOG: /tmp/test_pg_log.log
           # Fault injection configuration (using built-in failure plans)
