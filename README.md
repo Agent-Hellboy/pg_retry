@@ -8,6 +8,14 @@ A PostgreSQL extension that provides retry functionality for SQL statements on t
 
 `pg_retry` allows you to automatically retry SQL statements that fail due to transient errors such as serialization failures, deadlocks, lock timeouts, or query cancellations. It implements exponential backoff with jitter to avoid thundering herd problems.
 
+## ⚠️ Caution
+
+**This is an exploration library.**
+
+I am not expecting contributions at this time, as this project serves as a personal exploration of PostgreSQL internals and extension development. However, comments and discussions are welcome.
+
+This library intentionally violates a fundamental computer science principle: **making engineers explicitly aware of errors and failures**. By automatically retrying failed operations, it abstracts away transient errors that might contain valuable debugging information or indicate deeper systemic issues.
+
 ## Features
 
 - **Automatic retries** on configurable transient errors
@@ -258,10 +266,12 @@ Copyright (c) 2025, Prince Roshan
 
 This extension is released under PostgreSQL license terms. See the LICENSE file for the full license text.
 
+
+
 ## Contributing
 
-1. Fork the repository
-2. Make your changes
-3. Add tests for new functionality
-4. Ensure `make installcheck` passes
-5. Submit a pull request
+While contributions are not expected for this exploration project, you are welcome to:
+- Open issues to discuss the approach or report bugs
+- Comment on design decisions and implementation details
+- Fork the repository for your own experiments
+
