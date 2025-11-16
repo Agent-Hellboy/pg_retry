@@ -11,7 +11,7 @@ import pytest
 
 
 @pytest.mark.pgreplay
-def test_pgreplay_infrastructure_available(pg_cluster):
+def test_pgreplay_infrastructure_available(pg_cluster):  # noqa: ARG001
     """Test that pgreplay binary is available and can be invoked."""
     pgreplay_bin = shutil.which("pgreplay")
     assert pgreplay_bin is not None, "pgreplay binary not found in PATH - pgreplay tests require pgreplay to be installed"
@@ -43,8 +43,8 @@ def _run_pgreplay_replay(pg_cluster, require_csv: bool = False) -> None:
     try:
         # Drop any statements captured from prior tests to keep the replay log small.
         pg_cluster.truncate_log()
-        source_dsn = pg_cluster.dsn().replace("pg_retry_system_tests", source_db)
-        target_dsn = pg_cluster.dsn().replace("pg_retry_system_tests", target_db)
+        source_dsn = pg_cluster.dsn(dbname=source_db)
+        target_dsn = pg_cluster.dsn(dbname=target_db)
 
         # Set up source database with retry operations
         with psycopg.connect(source_dsn) as conn:
@@ -142,13 +142,21 @@ def _run_pgreplay_replay(pg_cluster, require_csv: bool = False) -> None:
         cmd.append(str(log_file))
 
         timeout_seconds = int(os.getenv("PG_REPLAY_TIMEOUT", "120"))
-        completed = subprocess.run(
-            cmd,
-            env=env,
-            text=True,
-            capture_output=True,
-            timeout=timeout_seconds
-        )
+        try:
+            completed = subprocess.run(
+                cmd,
+                env=env,
+                text=True,
+                capture_output=True,
+                timeout=timeout_seconds,
+            )
+        except subprocess.TimeoutExpired as exc:
+            stdout = exc.output or ""
+            stderr = exc.stderr or ""
+            pytest.fail(
+                "pgreplay did not finish within "
+                f"{timeout_seconds}s.\nCommand: {cmd}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}"
+            )
 
         # pgreplay should successfully replay the logs
         # Note: pgreplay may return non-zero even on success for some log formats
@@ -190,7 +198,7 @@ def test_pgreplay_basic_functionality(pg_cluster):
         conn.execute(f"CREATE DATABASE {test_db}")
 
     try:
-        test_dsn = pg_cluster.dsn().replace("pg_retry_system_tests", test_db)
+        test_dsn = pg_cluster.dsn(dbname=test_db)
 
         # Set up database with basic retry functionality
         with psycopg.connect(test_dsn) as conn:

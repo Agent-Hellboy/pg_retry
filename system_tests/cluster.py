@@ -287,7 +287,7 @@ class PgTestCluster:
     def truncate_log(self) -> None:
         if self.logfile.exists():
             self.logfile.write_text("", encoding="utf-8")
-        log_dir = self.data_dir / "log"
+        log_dir = self.data_dir / "pg_log"
         if log_dir.exists():
             for path in log_dir.glob("postgresql-*.log"):
                 path.unlink()
@@ -296,7 +296,7 @@ class PgTestCluster:
         chunks: list[str] = []
         if self.logfile.exists():
             chunks.append(self.logfile.read_text(encoding="utf-8"))
-        log_dir = self.data_dir / "log"
+        log_dir = self.data_dir / "pg_log"
         if log_dir.exists():
             for path in sorted(log_dir.glob("postgresql-*.log")):
                 chunks.append(path.read_text(encoding="utf-8"))
