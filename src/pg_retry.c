@@ -11,13 +11,25 @@
 #include "utils/memutils.h"
 #include "utils/errcodes.h"
 #include "tcop/tcopprot.h"
+#include "utils/resowner.h"
 #include "parser/parser.h"
 #include "nodes/parsenodes.h"
 #include "nodes/nodes.h"
+#include <ctype.h>
 #include <math.h>
 #include <stdlib.h>
 #include <stdio.h>
 
+#if PG_VERSION_NUM < 170000
+#error "pg_retry requires PostgreSQL 17 or newer"
+#endif
+#include "common/pg_prng.h" /* jitter depends on the backend PRNG API added in PG17 */
+#define PG_RETRY_RANDOM_DOUBLE() pg_prng_double(&pg_global_prng_state) /* stay consistent with backend randomness */
+
+/* PostgreSQL 19+ removed SPI_restore_connection(); keep retries portable. */
+#ifndef SPI_restore_connection
+#define SPI_restore_connection() ((void) 0)
+#endif
 PG_MODULE_MAGIC;
 
 /* GUC variables */
@@ -42,6 +54,74 @@ static bool contains_transaction_control(List *parsetree_list);
 static bool is_single_statement(const char *sql, List **parsed_tree);
 static long calculate_delay(int attempt, int base_delay_ms, int max_delay_ms);
 static void validate_sql(const char *sql, List **parsed_tree);
+static ArrayType *build_sqlstate_array(const char *csv);
+
+/*
+ * Convert a comma-separated SQLSTATE string into a TEXT[] for retry matching.
+ * Returns an empty array when the string is NULL/empty.
+ */
+static ArrayType *
+build_sqlstate_array(const char *csv)
+{
+    const char *ptr;
+    const char *start;
+    const char *end;
+    size_t len;
+    char *token;
+    int count = 0;
+    Datum *elements;
+    int idx = 0;
+    ArrayType *volatile array;
+
+    if (csv == NULL || *csv == '\0')
+        return construct_empty_array(TEXTOID);
+
+    for (ptr = csv; *ptr; ptr++)
+    {
+        if (*ptr == ',')
+            count++;
+    }
+    count++; /* number of tokens = commas + 1 */
+
+    elements = palloc(sizeof(Datum) * count);
+    ptr = csv;
+    while (*ptr)
+    {
+        while (*ptr && isspace((unsigned char)*ptr))
+            ptr++;
+
+        start = ptr;
+        while (*ptr && *ptr != ',')
+            ptr++;
+        end = ptr;
+
+        while (end > start && isspace((unsigned char)*(end - 1)))
+            end--;
+
+        if (end > start)
+        {
+            len = end - start;
+            token = palloc(len + 1);
+            memcpy(token, start, len);
+            token[len] = '\0';
+            elements[idx++] = CStringGetTextDatum(token);
+            pfree(token);
+        }
+
+        if (*ptr == ',')
+            ptr++;
+    }
+
+    if (idx == 0)
+    {
+        pfree(elements);
+        return construct_empty_array(TEXTOID);
+    }
+
+    array = construct_array(elements, idx, TEXTOID, -1, false, 'i');
+    pfree(elements);
+    return array;
+}
 
 /*
  * Check if a SQLSTATE is in the retry list, NOTE: SQLSTATEs are assigned at runtime by PostgreSQL
@@ -165,10 +245,12 @@ calculate_delay(int attempt, int base_delay_ms, int max_delay_ms)
 {
     double delay = base_delay_ms * pow(2.0, attempt - 1);
     double jitter;
+    double uniform;
     delay = Min(delay, (double)max_delay_ms);
 
-    /* Add jitter: ±20% */
-    jitter = ((double)rand() / RAND_MAX * delay * 0.4) - delay * 0.2;
+    /* Add jitter: ±20% using backend PRNG */
+    uniform = PG_RETRY_RANDOM_DOUBLE();
+    jitter = (uniform * delay * 0.4) - delay * 0.2;
     delay += jitter;
 
     /* Ensure minimum delay of 1ms */
@@ -176,7 +258,9 @@ calculate_delay(int attempt, int base_delay_ms, int max_delay_ms)
 }
 
 /*
- * Main retry function
+ * SQL-callable entry point that wraps the target statement in retry logic.
+ * Each attempt runs inside its own subtransaction so we can roll back safely,
+ * then we retry on configured SQLSTATEs using exponential backoff + jitter.
  */
 Datum
 pg_retry_retry(PG_FUNCTION_ARGS)
@@ -192,13 +276,21 @@ pg_retry_retry(PG_FUNCTION_ARGS)
     volatile int processed_rows = 0;
     volatile bool success = false;
     List *parsed_tree = NIL;
+    MemoryContext retry_context = CurrentMemoryContext;
+    ResourceOwner retry_owner = CurrentResourceOwner;
+    volatile bool default_sqlstates = false;
 
     /* Extract arguments */
     if (PG_ARGISNULL(0))
         ereport(ERROR,
                 (errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
                  errmsg("pg_retry: sql parameter cannot be null")));
-
+    
+    /* Extract the SQL argument. Even though we only accept one TEXT value,
+   * we still parse it with the PostgreSQL parser to ensure it is a single
+   * statement and contains no transaction control, keeping retries safe in 
+   validate_sql function
+   */
     sql_text = PG_GETARG_TEXT_PP(0);
     sql = text_to_cstring(sql_text);
 
@@ -208,10 +300,8 @@ pg_retry_retry(PG_FUNCTION_ARGS)
 
     if (PG_ARGISNULL(4))
     {
-        /* Parse default SQLSTATEs */
-        Datum sqlstates_datum = DirectFunctionCall1(textin, CStringGetDatum(pg_retry_default_sqlstates_str));
-        retry_sqlstates = DatumGetArrayTypeP(
-            DirectFunctionCall2(text_to_array, sqlstates_datum, CStringGetTextDatum(",")));
+        retry_sqlstates = build_sqlstate_array(pg_retry_default_sqlstates_str);
+        default_sqlstates = true;
     }
     else
     {
@@ -247,10 +337,14 @@ pg_retry_retry(PG_FUNCTION_ARGS)
     {
         PG_TRY();
         {
-            /* Start subtransaction */
+            /* Run each attempt inside its own subtransaction */
             BeginInternalSubTransaction(NULL);
+            MemoryContextSwitchTo(retry_context);
 
-            /* Execute the statement */
+            /* Execute the statement params it receive are sql,mode,nparams, we are passing false  for read write as this can modify data
+             (TODO: Should we retry readonly statements on retry? )
+             * and 0 for nparams as we are not passing any parameters
+             */
             spi_result = SPI_execute(sql, false, 0);
 
             if (spi_result < 0)
@@ -261,20 +355,26 @@ pg_retry_retry(PG_FUNCTION_ARGS)
                          errmsg("pg_retry: SPI_execute failed with code %d", spi_result)));
             }
 
-            processed_rows = SPI_processed;
-            success = true;
+            processed_rows = SPI_processed; // global variable set by SPI_execute
+            success = true; // set to true if the statement executed successfully
 
-            /* Commit subtransaction */
             ReleaseCurrentSubTransaction();
+            SPI_restore_connection(); // ensure SPI is reconnected for the parent
+            MemoryContextSwitchTo(retry_context);
+            CurrentResourceOwner = retry_owner; // restore the resource owner
         }
         PG_CATCH();
         {
-            ErrorData *errdata = CopyErrorData();
+            ErrorData *errdata;
             bool should_retry = false;
-            FlushErrorState();
 
-            /* Rollback subtransaction */
-            RollbackAndReleaseCurrentSubTransaction();
+            MemoryContextSwitchTo(retry_context);
+            errdata = CopyErrorData();
+            FlushErrorState();
+            RollbackAndReleaseCurrentSubTransaction(); // rollback the subtransaction and release the resources 
+            SPI_restore_connection(); // SPI needs reconnect after subtransaction cleanup
+            MemoryContextSwitchTo(retry_context);
+            CurrentResourceOwner = retry_owner;
 
             /* Check if this is a retryable error */
             if (errdata->sqlerrcode != 0)
@@ -285,7 +385,7 @@ pg_retry_retry(PG_FUNCTION_ARGS)
                 {
                     should_retry = true;
 
-                    /* Log retry attempt */
+                    /* Log retry attempt this will also call the longjmp function internally */
                     ereport(WARNING,
                             (errcode(errdata->sqlerrcode),
                              errmsg("pg_retry: attempt %d/%d failed with SQLSTATE %s: %s",
@@ -297,7 +397,7 @@ pg_retry_retry(PG_FUNCTION_ARGS)
             if (!should_retry || attempt == max_tries)
             {
                 /* Either not retryable or exhausted attempts - rethrow immediately */
-                PG_RE_THROW();
+                ReThrowError(errdata);
             }
             else
             {
@@ -325,10 +425,18 @@ pg_retry_retry(PG_FUNCTION_ARGS)
     if (success)
     {
         pfree(sql);
+        if (default_sqlstates)
+            pfree(retry_sqlstates);
+        else
+            PG_FREE_IF_COPY(retry_sqlstates, 4);
         PG_RETURN_INT32(processed_rows);
     }
     else
     {
+        if (default_sqlstates)
+            pfree(retry_sqlstates);
+        else
+            PG_FREE_IF_COPY(retry_sqlstates, 4);
         /* Should not reach here - errors should be rethrown in PG_CATCH */
         ereport(ERROR,
                 (errcode(ERRCODE_INTERNAL_ERROR),

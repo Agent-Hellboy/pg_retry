@@ -16,6 +16,11 @@ MODULES      = $(patsubst %.c,%,$(wildcard src/*.c))
 
 PG_CONFIG   ?= pg_config
 
+PYTHON ?= python3
+PYTEST ?= $(PYTHON) -m pytest
+SYSTEMTEST_PYTEST_FLAGS ?=
+SYSTEMTEST_SKIP_INSTALL ?= 0
+
 EXTRA_CLEAN = extension_sql/$(EXTENSION)--$(EXTVERSION).sql
 
 # Additional compiler flags (PGXS provides most flags)
@@ -26,6 +31,10 @@ PG_CFLAGS += -DUSE_ASSERT_CHECKING -Wall -Wextra -Werror -Wno-unused-parameter -
 PGXS := $(shell $(PG_CONFIG) --pgxs)
 
 include $(PGXS)
+
+ifeq ($(strip $(PYTHON)),)
+override PYTHON := python3
+endif
 
 all: extension_sql/$(EXTENSION)--$(EXTVERSION).sql
 
@@ -39,3 +48,9 @@ dist: clean all
 	rm -f $(EXTENSION)-$(DISTVERSION)/src/*.o $(EXTENSION)-$(DISTVERSION)/src/*.dylib
 	zip -r $(EXTENSION)-$(DISTVERSION).zip $(EXTENSION)-$(DISTVERSION)
 	rm -rf $(EXTENSION)-$(DISTVERSION)
+
+.PHONY: systemtest
+systemtest: all
+	if [ "$(SYSTEMTEST_SKIP_INSTALL)" != "1" ]; then $(MAKE) install; fi
+	$(PYTHON) -m pip install --upgrade -r system_tests/requirements.txt
+	$(PYTEST) $(SYSTEMTEST_PYTEST_FLAGS) system_tests
