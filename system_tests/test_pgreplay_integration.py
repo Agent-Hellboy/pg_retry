@@ -31,22 +31,15 @@ def test_pgreplay_infrastructure_available(pg_cluster):
     # Test validates that pgreplay infrastructure is available for retry testing
 
 
-@pytest.mark.pgreplay
-def test_pgreplay_log_replay_with_std_logging(pg_cluster):
-    """Test that pgreplay can replay standard logs containing pg_retry operations."""
+def _run_pgreplay_replay(pg_cluster, require_csv: bool = False) -> None:
     pgreplay_bin = shutil.which("pgreplay")
     assert pgreplay_bin is not None, "pgreplay binary not found in PATH - pgreplay tests require pgreplay to be installed"
-
-    # Create source database for generating logs
     source_db = "pgreplay_source_db"
     with psycopg.connect(pg_cluster.dsn(), autocommit=True) as conn:
         conn.execute(f"CREATE DATABASE {source_db}")
-
-    # Create target database for replay
     target_db = "pgreplay_target_db"
     with psycopg.connect(pg_cluster.dsn(), autocommit=True) as conn:
         conn.execute(f"CREATE DATABASE {target_db}")
-
     try:
         # Drop any statements captured from prior tests to keep the replay log small.
         pg_cluster.truncate_log()
@@ -108,6 +101,9 @@ def test_pgreplay_log_replay_with_std_logging(pg_cluster):
         # Use the most recent log file (prefer CSV for pgreplay)
         log_file = sorted(all_files, key=lambda x: x.stat().st_mtime, reverse=True)[0]
 
+        if require_csv and not csv_files:
+            pytest.skip("Cluster logging did not produce CSV files")
+
         # Set up target database (same schema, no data)
         with psycopg.connect(target_dsn) as conn:
             conn.execute("CREATE EXTENSION IF NOT EXISTS pg_retry")
@@ -131,28 +127,28 @@ def test_pgreplay_log_replay_with_std_logging(pg_cluster):
         env = pg_cluster.client_env()
         env["PGDATABASE"] = target_db
 
-    # Use -c flag for CSV files, -j skips idle time so replay finishes quickly
-    cmd = [
-        pgreplay_bin,
-        "-h", pg_cluster.host,
-        "-p", str(pg_cluster.port),
-        "-U", pg_cluster.user,
-        "-j",
-    ]
+        # Use -c flag for CSV files, -j skips idle time so replay finishes quickly
+        cmd = [
+            pgreplay_bin,
+            "-h", pg_cluster.host,
+            "-p", str(pg_cluster.port),
+            "-U", pg_cluster.user,
+            "-j",
+        ]
 
         if log_file.suffix == '.csv':
             cmd.append("-c")
 
         cmd.append(str(log_file))
 
-            timeout_seconds = int(os.getenv("PG_REPLAY_TIMEOUT", "120"))
-            completed = subprocess.run(
-                cmd,
-                env=env,
-                text=True,
-                capture_output=True,
-                timeout=timeout_seconds
-            )
+        timeout_seconds = int(os.getenv("PG_REPLAY_TIMEOUT", "120"))
+        completed = subprocess.run(
+            cmd,
+            env=env,
+            text=True,
+            capture_output=True,
+            timeout=timeout_seconds
+        )
 
         # pgreplay should successfully replay the logs
         # Note: pgreplay may return non-zero even on success for some log formats
@@ -170,6 +166,17 @@ def test_pgreplay_log_replay_with_std_logging(pg_cluster):
             conn.execute(f"DROP DATABASE IF EXISTS {source_db}")
             conn.execute(f"DROP DATABASE IF EXISTS {target_db}")
 
+
+@pytest.mark.pgreplay
+def test_pgreplay_log_replay_with_std_logging(pg_cluster):
+    """Test that pgreplay can replay standard logs containing pg_retry operations."""
+    _run_pgreplay_replay(pg_cluster, require_csv=False)
+
+
+@pytest.mark.pgreplay
+def test_pgreplay_log_replay_with_csv_logging(pg_cluster):
+    """Test that pgreplay can replay logs when CSV logging is enabled."""
+    _run_pgreplay_replay(pg_cluster, require_csv=True)
 
 @pytest.mark.pgreplay
 def test_pgreplay_basic_functionality(pg_cluster):

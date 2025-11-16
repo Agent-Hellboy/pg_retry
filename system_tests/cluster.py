@@ -26,6 +26,9 @@ def _find_free_port() -> int:
 
 
 def _which_pg_config() -> str:
+    candidate = os.environ.get("PG_CONFIG")
+    if candidate:
+        return candidate
     pg_config = shutil.which("pg_config")
     if pg_config is None:
         raise RuntimeError("pg_config is required to run system tests")
@@ -37,6 +40,12 @@ def _is_shared_memory_permission_error(exc: subprocess.CalledProcessError) -> bo
     text = "\n".join(bit for bit in output_bits if bit).lower()
     needle = "could not create shared memory segment"
     return needle in text and ("operation not permitted" in text or "permission denied" in text)
+
+
+def _is_shared_memory_resource_exhausted(exc: subprocess.CalledProcessError) -> bool:
+    output_bits = [exc.stderr, exc.stdout]
+    text = "\n".join(bit for bit in output_bits if bit).lower()
+    return "could not create shared memory segment" in text and "no space left on device" in text
 
 
 class PgTestCluster:
@@ -109,6 +118,10 @@ class PgTestCluster:
             if _is_shared_memory_permission_error(exc):
                 raise ClusterEnvironmentError(
                     "initdb failed: shared memory allocation is not permitted in this environment"
+                ) from exc
+            if _is_shared_memory_resource_exhausted(exc):
+                raise ClusterEnvironmentError(
+                    "initdb failed: shared memory is exhausted on this system"
                 ) from exc
             raise
 
