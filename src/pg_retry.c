@@ -25,6 +25,11 @@
 #endif
 #include "common/pg_prng.h" /* jitter depends on the backend PRNG API added in PG16 */
 #define PG_RETRY_RANDOM_DOUBLE() pg_prng_double(&pg_global_prng_state) /* stay consistent with backend randomness */
+
+/* PostgreSQL 19+ removed SPI_restore_connection(); keep retries portable. */
+#ifndef SPI_restore_connection
+#define SPI_restore_connection() ((void) 0)
+#endif
 PG_MODULE_MAGIC;
 
 /* GUC variables */
