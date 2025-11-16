@@ -22,7 +22,7 @@ A PostgreSQL extension that provides retry functionality for SQL statements on t
 
 ### Prerequisites
 
-- PostgreSQL 16+
+- PostgreSQL 17+
 - C compiler and build tools
 
 ### Install from PGXN

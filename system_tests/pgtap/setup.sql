@@ -85,8 +85,8 @@ SELECT ok(
 
 -- Test 15: Extension version check
 SELECT ok(
-    current_setting('server_version_num')::int >= 160000,
-    'PostgreSQL version should be supported (16+)'
+    current_setting('server_version_num')::int >= 170000,
+    'PostgreSQL version should be supported (17+)'
 );
 
 -- Finish tests

@@ -20,10 +20,10 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#if PG_VERSION_NUM < 160000
-#error "pg_retry requires PostgreSQL 16 or newer"
+#if PG_VERSION_NUM < 170000
+#error "pg_retry requires PostgreSQL 17 or newer"
 #endif
-#include "common/pg_prng.h" /* jitter depends on the backend PRNG API added in PG16 */
+#include "common/pg_prng.h" /* jitter depends on the backend PRNG API added in PG17 */
 #define PG_RETRY_RANDOM_DOUBLE() pg_prng_double(&pg_global_prng_state) /* stay consistent with backend randomness */
 
 /* PostgreSQL 19+ removed SPI_restore_connection(); keep retries portable. */
